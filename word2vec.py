@@ -1,4 +1,6 @@
 from code import interact
+import yaml
+from collections import deque
 import string
 from collections import defaultdict
 from ast import literal_eval
@@ -34,11 +36,14 @@ def make_sentance_list(review):
     return sentances
 
 def list_review_sentances(fname):
-    sentances = []
+    sentances = deque()
+    count = 0
     for data in yield_data(fname):
+        count += 1
+        if count % 10000 == 0: print count/10000
         review_text = data['reviewText']
         new_sentances = make_sentance_list(review_text)
-        sentances = sentances + new_sentances
+        sentances.extend(new_sentances)
     return sentances
 
 num_features = 500
@@ -49,6 +54,8 @@ downsampling = 1e-3
 
 print "Building sentance list..."
 sentances = list_review_sentances('train.json')
+with open('sentances.yml', 'w') as infile:
+    yaml.dump(sentances, infile)
 print "Training model..."
 model = word2vec.Word2Vec(sentances, workers=num_workers, size=num_features,
                           min_count=min_word_count, window=context,
