@@ -1,16 +1,15 @@
 import gzip
 from collections import defaultdict
-from code import interact
 
 def readGz(f):
-  for l in open(f):
+  for l in gzip.open(f):
     yield eval(l)
 
 ### Rating baseline: compute averages for each user, or return the global average if we've never seen the user before
 
 allRatings = []
 userRatings = defaultdict(list)
-for l in readGz("train.json"):
+for l in readGz("train.json.gz"):
   user,item = l['reviewerID'],l['itemID']
   allRatings.append(l['rating'])
   userRatings[user].append(l['rating'])
@@ -34,14 +33,12 @@ for l in open("pairs_Rating.txt"):
 
 predictions.close()
 
-interact(local=locals())
-
 ### Helpfulness baseline: similar to the above. Compute the global average helpfulness rate, and the average helpfulness rate for each user
 
 allHelpful = []
 userHelpful = defaultdict(list)
 
-for l in readGz("train.json"):
+for l in readGz("train.json.gz"):
   user,item = l['reviewerID'],l['itemID']
   allHelpful.append(l['helpful'])
   userHelpful[user].append(l['helpful'])
@@ -75,7 +72,7 @@ predictions.close()
 itemCount = defaultdict(int)
 totalPurchases = 0
 
-for l in readGz("train.json"):
+for l in readGz("train.json.gz"):
   user,item = l['reviewerID'],l['itemID']
   itemCount[item] += 1
   totalPurchases += 1

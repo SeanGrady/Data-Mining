@@ -30,10 +30,12 @@ def make_sentance_list(review):
                  if len(sentance) > 0]
     return sentances
 
-def generate_review_sentances(data):
+def list_review_sentances(data):
+    sentances = []
     for d in data:
         review_text = d['reviewText']
-        yield make_sentance_list(review_text)
+        sentances.extend(make_sentance_list(review_text))
+	return sentances
 
 num_features = 500
 min_word_count = 40
@@ -42,8 +44,9 @@ context = 10
 downsampling = 1e-3
 
 print "Training model..."
-model = word2vec.Word2Vec(generate_review_sentances(yield_data('train.json')),
-                          workers=num_workers, size=num_features,
+sentances = list_review_sentances(yield_data('train.json'))
+print sentances[0]
+model = word2vec.Word2Vec(sentances, workers=num_workers, size=num_features,
                           min_count=min_word_count, window=context,
                           sample=downsampling)
 
