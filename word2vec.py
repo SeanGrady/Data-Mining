@@ -1,5 +1,4 @@
 from code import interact
-import yaml
 from collections import deque
 import string
 from collections import defaultdict
@@ -54,8 +53,6 @@ downsampling = 1e-3
 
 print "Building sentance list..."
 sentances = list_review_sentances('train.json')
-with open('sentances.yml', 'w') as infile:
-    yaml.dump(sentances, infile)
 print "Training model..."
 model = word2vec.Word2Vec(sentances, workers=num_workers, size=num_features,
                           min_count=min_word_count, window=context,
