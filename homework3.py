@@ -40,7 +40,7 @@ valid_features = [{'nHelpful':rev['helpful']['nHelpful'],
 train_alpha = sum([rev['ratio'] for rev in train_features])/len(train_features)
 
 tot_error = 0
-for review in valid_dat:
+for review in valid_data:
     nHelpful = review['helpful']['nHelpful']
     outOf = review['helpful']['outOf']
     prediction = round(train_alpha * outOf)
@@ -56,17 +56,34 @@ def construct_feature(review):
     feature = [1.0, num_words, rating]
     return feature
 
+def construct_labels(data):
+    y = []
+    for review in data:
+        outOf = review['helpful']['outOf']
+        nHelpful = review['helpful']['nHelpful']
+        if outOf > 0:
+            ratio = float(nHelpful)/outOf
+        else:
+            ratio = 0.0
+        y.append(ratio)
+    return y
+
 X = [construct_feature(review) for review in train_data]
-y = []
-for review in train_data:
-    outOf = review['helpful']['outOf']
-    nHelpful = review['helpful']['nHelpful']
-    if outOf > 0:
-        ratio = float(nHelpful)/outOf
-    else:
-        ratio = 0.0
-    y.append(ratio)
+y = construct_labels(train_data)
 
 theta, residuals, rank, s = numpy.linalg.lstsq(X, y)
+
+X_v = [numpy.array(construct_feature(review)) for review in valid_data]
+y_v = [[review['helpful']['nHelpful'],
+        review['helpful']['outOf']]
+        for review in valid_data]
+
+tot_error_2 = 0
+for feature, label in zip(X_v, y_v):
+    if label[1] > 0:
+        p_ratio = numpy.dot(feature, theta)
+        prediction = round(p_ratio * label[1])
+        error = abs(label[0] - prediction)
+        tot_error_2 += error
 
 interact(local=locals())
