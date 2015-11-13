@@ -23,40 +23,30 @@ def load_fields(fname, fields, start, end):
         helpful.append(line_dict)
     return helpful
 
-"""
 fields = ['helpful', 'reviewText', 'rating']
 #data = load_fields('train.json', fields)
-train_data = load_fields('train.json', fields, 0, 100000)
+print "Loading data..."
+train_data = load_fields('train.json', fields, 0, 900000)
 valid_data = load_fields('train.json', fields, 900000, 1000000)
-
-train_features = [{'nHelpful':rev['helpful']['nHelpful'],
-                   'outOf':rev['helpful']['outOf'],
-                   'ratio':(float(rev['helpful']['nHelpful'])/rev['helpful']['outOf'])}
-                   for rev in train_data if rev['helpful']['outOf'] > 0]
-
-valid_features = [{'nHelpful':rev['helpful']['nHelpful'],
-                   'outOf':rev['helpful']['outOf'],
-                   'ratio':(float(rev['helpful']['nHelpful'])/rev['helpful']['outOf'])}
-                   for rev in valid_data if rev['helpful']['outOf'] > 0]
-
-train_alpha = sum([rev['ratio'] for rev in train_features])/len(train_features)
-
-tot_error = 0
-for review in valid_data:
-    nHelpful = review['helpful']['nHelpful']
-    outOf = review['helpful']['outOf']
-    prediction = round(train_alpha * outOf)
-    error = abs(nHelpful - prediction)
-    if outOf > 0:
-        tot_error += error
+print "Data loaded."
 
 def construct_feature(review):
-    punctuation = set(string.punctuation)
-    r = ''.join([c for c in review['reviewText'].lower() 
-                 if not c in punctuation])
-    num_words = len(r.split())
+    #the features are num capital words, num '!', num '?', num words,
+    #num chars, rating, num votes
+    text = review['reviewText']
     rating = review['rating']
-    feature = [1.0, num_words, rating]
+    num_votes = review['helpful']['outOf']
+    num_chars = len(text)
+    num_exp = len([char for char in text if char is '!'])
+    num_ques = len([char for char in text if char is '?'])
+    punctuation = set(string.punctuation)
+    r = ''.join([c for c in text.lower() 
+                 if not c in punctuation])
+    words = r.split()
+    cap_words = [word for word in words if word.isupper()]
+    num_words = len(words)
+    num_cap_words = len(cap_words)
+    feature = [num_chars, num_cap_words, num_words, num_exp, num_ques, num_votes, rating]
     return feature
 
 def construct_labels(data):
@@ -285,3 +275,4 @@ print "making kaggle predictions for rating..."
 kaggle_rating_predictor('pairs_Rating.txt', model, 'kaggle_ratings.txt')
 
 interact(local=locals())
+"""
