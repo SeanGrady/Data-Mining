@@ -70,14 +70,18 @@ def update_alpha(data, model, regularizer):
     b_i = model.b_i
     g_u = model.g_u
     g_i = model.g_i
-    nominator = deque()
+    #nominator = deque()
+    nominator = 0.0
     for review in data:
         uid = review['reviewerID']
         iid = review['itemID']
         rating = review['rating']
-        nominator.append(rating - (b_u[uid] + b_i[iid] 
+        #nominator.append(rating - (b_u[uid] + b_i[iid] 
+        #                           + np.dot(g_u[uid], g_i[iid])))
+        nominator += (rating - (b_u[uid] + b_i[iid] 
                                    + np.dot(g_u[uid], g_i[iid])))
-    alpha = sum(nominator)/len(data)
+    #alpha = sum(nominator)/len(data)
+    alpha = nominator / len(data)
     return alpha
 
 def update_bi(model, regularizer):
@@ -117,17 +121,20 @@ def update_gu(model, regularizer):
     g_i = model.g_i
     for uid, i_dict in user_dict.iteritems():
         for k in range(len(g_u[uid])):
-            nlist = deque()
+            #nlist = deque()
+            numerator = 0.0
             dsum = 0.0
             for iid, review in i_dict.iteritems():
                 glist = [g_i[iid][i]*g_u[uid][i]
                          for i in range(len(g_i[iid]))
                          if i != k]
                 gdot = sum(glist)
-                nlist.append(g_i[iid][k]*(review - (alpha + b_u[uid] 
+                #nlist.append(g_i[iid][k]*(review - (alpha + b_u[uid] 
+                #                                    + b_i[iid] + gdot)))
+                numerator += (g_i[iid][k]*(review - (alpha + b_u[uid] 
                                                     + b_i[iid] + gdot)))
                 dsum += g_i[iid][k]**2
-            numerator = sum(nlist)
+            #numerator = sum(nlist)
             denominator = float(regularizer + dsum)
             guk = numerator / denominator
             g_u[uid][k] = guk
@@ -142,17 +149,20 @@ def update_gi(model, regularizer):
     g_i = model.g_i
     for iid, u_dict in item_dict.iteritems():
         for k in range(len(g_i[iid])):
-            nlist = deque()
+            #nlist = deque()
+            numerator = 0.0
             dsum = 0.0
             for uid, review in u_dict.iteritems():
                 glist = [g_i[iid][i]*g_u[uid][i]
                          for i in range(len(g_i[iid]))
                          if i != k]
                 gdot = sum(glist)
-                nlist.append(g_u[uid][k]*(review - (alpha + b_u[uid] 
+                #nlist.append(g_u[uid][k]*(review - (alpha + b_u[uid] 
+                #                                    + b_i[iid] + gdot)))
+                numerator += (g_u[uid][k]*(review - (alpha + b_u[uid] 
                                                     + b_i[iid] + gdot)))
                 dsum += g_u[uid][k]**2
-            numerator = sum(nlist)
+            #numerator = sum(nlist)
             denominator = float(regularizer + dsum)
             gik = numerator / denominator
             g_i[iid][k] = gik
