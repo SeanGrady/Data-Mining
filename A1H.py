@@ -10,8 +10,10 @@ import gc
 
 def line_generator(fname, start, end):
     i = 0
+    print_set = set([i*100000 for i in range(10)])
     for line in open(fname):
         if i >= start and i <= end:
+            if i in print_set: print i
             yield literal_eval(line)
         i += 1
         if i > end: break
@@ -25,8 +27,9 @@ def load_fields(fname, fields, start, end):
 
 fields = ['helpful', 'reviewText', 'rating']
 #data = load_fields('train.json', fields)
-print "Loading data..."
+print "Loading testing data..."
 train_data = load_fields('train.json', fields, 0, 900000)
+print "Loading validation data..."
 valid_data = load_fields('train.json', fields, 900000, 1000000)
 print "Data loaded."
 
@@ -46,7 +49,7 @@ def construct_feature(review):
     cap_words = [word for word in words if word.isupper()]
     num_words = len(words)
     num_cap_words = len(cap_words)
-    feature = [num_chars, num_cap_words, num_words, num_exp, num_ques, num_votes, rating]
+    feature = [1.0, num_chars, num_cap_words, num_words, num_exp, num_ques, num_votes, rating]
     return feature
 
 def construct_labels(data):
@@ -62,25 +65,36 @@ def construct_labels(data):
         y.append(ratio)
     return y
 
+print "Construcing training vectors..."
+
 X = [construct_feature(review) for review in train_data 
      if review['helpful']['outOf'] > 0]
 y = construct_labels(train_data)
 
+print "beginning least squares regression..."
+
 theta, residuals, rank, s = numpy.linalg.lstsq(X, y)
 print "Theta: ", theta
+
+print "Constructing validation sets..."
 
 X_v = [numpy.array(construct_feature(review)) for review in valid_data]
 y_v = [[review['helpful']['nHelpful'],
         review['helpful']['outOf']]
         for review in valid_data]
 
-tot_error_2 = 0
+print "Finding validation error..."
+
+tot_error = 0
 for feature, label in zip(X_v, y_v):
     if label[1] > 0:
         p_ratio = numpy.dot(feature, theta)
-        prediction = round(p_ratio * label[1])
+        prediction = p_ratio * label[1]
         error = abs(label[0] - prediction)
-        tot_error_2 += error
+        tot_error += error
+
+print "Total error: ", tot_error
+print "Mean error: ", tot_error/len(valid_data)
 
 def pair_generator(fname):
     pairs = []
@@ -122,6 +136,7 @@ with open('kpred.txt', 'w') as kpred:
         out_of = str(pair[0][2])
         pred = str(pair[1])
         kpred.write('-'.join([uid, iid, out_of])+','+pred+'\n')
+
 """
 
 ############## PART 2 ################

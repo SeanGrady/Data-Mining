@@ -1,3 +1,5 @@
 *.json
 .DS_store
 *.swp
+Doc2Vec*
+*.txt
