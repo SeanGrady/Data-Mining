@@ -1,10 +1,13 @@
 import numpy as np
+import json
 from collections import deque
 from copy import copy
 from random import random
 from ast import literal_eval
 from code import interact
-from collections import defaultdict
+from collections import defaultdict, namedtuple
+
+testing = False
 
 def line_generator(fname, start, end):
     i = 0
@@ -30,9 +33,10 @@ def load_data(fname, start, end):
     return data_list 
 
 print "Loading training data..."
-train_data = load_data('train.json', 0, 900000)
-print "Loading testing data..."
-valid_data = load_data('train.json', 900000, 1000000)
+train_data = load_data('train.json', 0, 1000000)
+if testing:
+    print "Loading testing data..."
+    valid_data = load_data('train.json', 900000, 1000000)
 print "Data loaded."
 
 class Model():
@@ -229,9 +233,50 @@ def MSE(model, data):
     mean_squared_error = squared_error / len(data)
     return mean_squared_error
 
-print "calculating MSE"
-valid_mse = MSE(model, valid_data)
-print "MSE: ", valid_mse
-print "Regularizer: ", regularizer
+if testing:
+    print "calculating MSE"
+    valid_mse = MSE(model, valid_data)
+    print "MSE: ", valid_mse
+    print "Regularizer: ", regularizer
 
+"""
+def convert_model(model):
+    dumpable_model = {
+            'a': model.alpha,
+            'b_u': model.b_u,
+            'b_i': model.b_i,
+            'g_u': model.g_u,
+            'g_i': model.g_i
+    }
+    return dumpable_model 
+
+print "Dumping model..."
+with open('model.txt', 'w') as mfile:
+    json_model = convert_model(model)
+    json.dump(json_model, mfile) 
+print "Making Kaggle predictions..."
+"""
+#################### Kaggle Predictions ######################################
+
+def rpair_generator(fname):
+    pairs = []
+    with open(fname) as pfile:
+        for line in pfile:
+            if line.startswith('user'): continue    #skip header
+            uid, iid = line.strip().split('-')
+            pairs.append({'uid':uid, 'iid':iid})
+    return pairs
+
+def kaggle_rating_predictor(test_file, model, kaggle_file):
+    pairs = rpair_generator(test_file)
+    with open(kaggle_file, 'w') as kfile:
+        kfile.write('userID-itemID,prediction\n')
+        for pair in pairs:
+            uid = pair['uid']
+            iid = pair['iid']
+            prediction = predict(uid, iid, model) 
+            kfile.write('-'.join([uid, iid]) + ',' + str(prediction) + '\n')
+
+print "making kaggle predictions for rating..."
+kaggle_rating_predictor('pairs_Rating.txt', model, 'kaggle_ratings.txt')
 #interact(local=locals())

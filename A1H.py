@@ -8,7 +8,7 @@ import scipy.optimize
 from collections import deque, defaultdict
 import gc
 
-def line_generator(fname, start, end):
+def line_generator(fname, start=0, end=1000000):
     i = 0
     print_set = set([i*100000 for i in range(10)])
     for line in open(fname):
@@ -25,17 +25,39 @@ def load_fields(fname, fields, start, end):
         helpful.append(line_dict)
     return helpful
 
-fields = ['helpful', 'reviewText', 'rating']
+fields = ['helpful', 'reviewText', 'rating', 'reviewerID', 'itemID']
 #data = load_fields('train.json', fields)
 print "Loading testing data..."
-train_data = load_fields('train.json', fields, 0, 900000)
+train_data = load_fields('train.json', fields, 0, 1000000)
 print "Loading validation data..."
 valid_data = load_fields('train.json', fields, 900000, 1000000)
 print "Data loaded."
 
+def build_avg_dict(data, field):
+    avg_dict = defaultdict(lambda: 0.7372)
+    tot_dict = defaultdict(list)
+    for review in data:
+        outOf = review['helpful']['outOf']
+        if outOf > 0:
+            fid = review[field]
+            nHelpful = review['helpful']['nHelpful']
+            ratio = float(nHelpful)/outOf
+            tot_dict[fid].append(ratio)
+    for ID, ratio_list in tot_dict.iteritems():
+        total = sum(ratio_list)
+        if total == 0: continue
+        average = float(total)/len(ratio_list)
+        avg_dict[ID] = average
+    return avg_dict
+
+print "Building user models..."
+uavg_dict = build_avg_dict(train_data, 'reviewerID')
+print "Building item models..."
+iavg_dict = build_avg_dict(train_data, 'itemID')
+
 def construct_feature(review):
     #the features are num capital words, num '!', num '?', num words,
-    #num chars, rating, num votes
+    #num chars, rating, num votes, user_avg, item_avg
     text = review['reviewText']
     rating = review['rating']
     num_votes = review['helpful']['outOf']
@@ -49,7 +71,29 @@ def construct_feature(review):
     cap_words = [word for word in words if word.isupper()]
     num_words = len(words)
     num_cap_words = len(cap_words)
-    feature = [1.0, num_chars, num_cap_words, num_words, num_exp, num_ques, num_votes, rating]
+    uid = review['reviewerID']
+    iid = review['itemID']
+    user_avg = uavg_dict[uid]
+    item_avg = iavg_dict[iid]
+    base_features = [
+            num_chars,
+            num_cap_words,
+            num_words,
+            num_exp,
+            num_ques,
+            num_votes,
+            rating,
+            item_avg,
+            user_avg
+    ]
+    squared_features = [feature**2 for feature in base_features]
+    cubed_features = [feature**3 for feature in base_features]
+    variable_features = [feature for t in zip(base_features,
+                                    squared_features,
+                                    cubed_features)
+               for feature in t]
+    feature = [1.0]
+    feature.extend(variable_features)
     return feature
 
 def construct_labels(data):
@@ -65,16 +109,80 @@ def construct_labels(data):
         y.append(ratio)
     return y
 
-print "Construcing training vectors..."
+def counts_dict(data):
+    counts = defaultdict(int)
+    for line in line_generator('train.json'):
+        counts[line['helpful']['outOf']] += 1
+    return counts
 
+def find_bins(data, n_bins):
+    counts = counts_dict(data)
+    counts.pop(0)
+    revs_per_bin = sum(counts.values())/float(n_bins)
+    sorted_keys = sorted(counts.keys())
+    current_bin = 0
+    leftover = 0
+    bin_list = []
+    for index, key in enumerate(sorted_keys):
+        if current_bin == 0:
+            low_value = key
+            current_bin += leftover
+        current_bin += counts[key]
+        if current_bin >= revs_per_bin:
+            leftover = current_bin - revs_per_bin
+            current_bin = 0
+            high_value = key
+            bin_list.append((low_value, high_value))
+    return bin_list
+
+def make_bins(data, bin_dict):
+    for review in data:
+        outOf = review['helpful']['outOf']
+        if outOf > 0:
+            feature_vec = construct_feature(review)
+            label = float(review['helpful']['nHelpful'])/outOf
+            if outOf == 1:
+                bin_dict[0]['X'].append(feature_vec)
+                bin_dict[0]['y'].append(label)
+            if outOf > 1 and outOf <= 10:
+                bin_dict[1]['X'].append(feature_vec)
+                bin_dict[1]['y'].append(label)
+            if outOf > 10 and outOf <= 100:
+                bin_dict[10]['X'].append(feature_vec)
+                bin_dict[10]['y'].append(label)
+            if outOf > 100 and outOf < 10000:
+                bin_dict[100]['X'].append(feature_vec)
+                bin_dict[100]['y'].append(label)
+    return bin_dict
+
+def train_classifiers(bin_dict):
+    classifier_dict = dict()
+    for key, value in bin_dict.iteritems():
+        X = value['X']
+        y = value['y']
+        theta, residuals, rank, s = numpy.linalg.lstsq(X, y)
+        classifier_dict[key] = theta
+    return classifier_dict
+
+#bin_list = find_bins(data, 5)
+init_bin_dict = defaultdict(lambda: defaultdict(list))
+bin_dict = make_bins(train_data, init_bin_dict)
+print "Training classifiers..."
+classifier_dict = train_classifiers(bin_dict)
+
+"""
+print "Construcing training vectors..."
+train_vectors = construct_train_vectors(train_data, 5)
+interact(local=locals())
 X = [construct_feature(review) for review in train_data 
-     if review['helpful']['outOf'] > 0]
+     if ((review['helpful']['outOf'] > 0) and (review['helpful']['outOf'] < 10))]
 y = construct_labels(train_data)
 
 print "beginning least squares regression..."
 
 theta, residuals, rank, s = numpy.linalg.lstsq(X, y)
 print "Theta: ", theta
+"""
 
 print "Constructing validation sets..."
 
@@ -85,6 +193,41 @@ y_v = [[review['helpful']['nHelpful'],
 
 print "Finding validation error..."
 
+def mult_calc_error(X_v, y_v, classifier_dict):
+    tot_error = 0
+    for feature, label in zip(X_v, y_v):
+        outOf = label[1]
+        nHelpful = label[0]
+        if outOf > 0:
+            theta = pick_theta(outOf, classifier_dict)
+            prediction = make_prediction(feature, theta, outOf)
+            error = abs(nHelpful - prediction)
+            tot_error += error
+    return tot_error
+
+def pick_theta(outOf, classifier_dict):
+    if outOf == 1:
+        theta = classifier_dict[0]
+
+    if outOf > 1 and outOf <= 10:
+        theta = classifier_dict[1]
+
+    if outOf > 10 and outOf <= 100:
+        theta = classifier_dict[10]
+
+    if outOf > 100:
+        theta = classifier_dict[100]
+
+    return theta
+
+def make_prediction(feature, theta, outOf):
+    p_ratio = numpy.dot(feature, theta)
+    if p_ratio < 0: p_ratio = 0
+    if p_ratio > 1: p_ratio = 1
+    prediction = p_ratio * outOf
+    return prediction
+
+"""
 tot_error = 0
 for feature, label in zip(X_v, y_v):
     if label[1] > 0:
@@ -92,7 +235,9 @@ for feature, label in zip(X_v, y_v):
         prediction = p_ratio * label[1]
         error = abs(label[0] - prediction)
         tot_error += error
+"""
 
+tot_error = mult_calc_error(X_v, y_v, classifier_dict)
 print "Total error: ", tot_error
 print "Mean error: ", tot_error/len(valid_data)
 
@@ -108,7 +253,7 @@ def yield_line(fname):
     for line in open(fname):
         yield literal_eval(line)
 
-def test_feature_gen(pairs_fname, data_fname):
+def test_feature_gen(pairs_fname, data_fname, classifier_dict):
     pair_predictions = []
     pairs = pair_generator(pairs_fname)
     for line in yield_line(data_fname):
@@ -117,16 +262,25 @@ def test_feature_gen(pairs_fname, data_fname):
         out_of = line['helpful']['outOf']
         pair = [uid, iid, out_of]
         if pair in pairs:
-            feature_vec = numpy.array(construct_feature(line))
-            ratio_prediction = numpy.dot(feature_vec, theta)
-            prediction = ratio_prediction * out_of
-            pair_predictions.append([pair, prediction])
+            if out_of > 0:
+                feature_vec = numpy.array(construct_feature(line))
+                theta = pick_theta(out_of, classifier_dict)
+                #ratio_prediction = numpy.dot(feature_vec, theta)
+                #prediction = ratio_prediction * out_of
+                prediction = make_prediction(feature_vec, theta, out_of)
+                pair_predictions.append([pair, prediction])
+            else:
+                pair_predictions.append([pair, 0.0])
         else:
             print "Pair not found in pairs!"
     return pair_predictions
 
 print "making kaggle predictions..."
-pair_predictions = test_feature_gen('pairs_Helpful.txt', 'helpful.json')
+pair_predictions = test_feature_gen(
+    'pairs_Helpful.txt',
+    'helpful.json',
+    classifier_dict
+)
 
 with open('kpred.txt', 'w') as kpred:
     kpred.write('userID-itemID-outOf,prediction\n')
@@ -136,6 +290,8 @@ with open('kpred.txt', 'w') as kpred:
         out_of = str(pair[0][2])
         pred = str(pair[1])
         kpred.write('-'.join([uid, iid, out_of])+','+pred+'\n')
+
+interact(local=locals())
 
 """
 
